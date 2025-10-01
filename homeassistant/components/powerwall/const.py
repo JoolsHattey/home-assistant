@@ -16,7 +16,8 @@ ATTR_INSTANT_AVERAGE_VOLTAGE = "instant_average_voltage"
 ATTR_INSTANT_TOTAL_CURRENT = "instant_total_current"
 ATTR_IS_ACTIVE = "is_active"
 
-MODEL = "PowerWall 2"
+MODEL_PW2 = "PowerWall 2"
+MODEL_PW3 = "PowerWall 3"
 MANUFACTURER = "Tesla"
 
 CONFIG_ENTRY_COOKIE = "cookie"

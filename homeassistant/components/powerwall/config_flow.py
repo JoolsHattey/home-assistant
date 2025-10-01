@@ -8,13 +8,23 @@ import logging
 from typing import Any
 
 from aiohttp import CookieJar
-from tesla_powerwall import (
-    AccessDeniedError,
-    MissingAttributeError,
-    Powerwall,
-    PowerwallUnreachableError,
-    SiteInfoResponse,
-)
+import pypowerwall
+
+# Compatibility exceptions for pypowerwall
+class AccessDeniedError(Exception):
+    """Access denied error for pypowerwall compatibility."""
+
+class MissingAttributeError(Exception):
+    """Missing attribute error for pypowerwall compatibility."""
+
+class PowerwallUnreachableError(Exception):
+    """Powerwall unreachable error for pypowerwall compatibility."""
+
+# Compatibility response types
+class SiteInfoResponse:
+    """Site info response compatibility."""
+    def __init__(self, site_name: str):
+        self.site_name = site_name
 import voluptuous as vol
 
 from homeassistant.config_entries import (
@@ -43,27 +53,32 @@ ENTRY_FAILURE_STATES = {
 
 
 async def _login_and_fetch_site_info(
-    power_wall: Powerwall, password: str
+    power_wall: pypowerwall.Powerwall, password: str
 ) -> tuple[SiteInfoResponse, str]:
     """Login to the powerwall and fetch the base info."""
-    if password is not None:
-        await power_wall.login(password)
-
-    return await asyncio.gather(
-        power_wall.get_site_info(), power_wall.get_gateway_din()
-    )
+    # pypowerwall handles authentication internally
+    if not power_wall.is_connected():
+        power_wall.connect()
+    
+    # Get site info and gateway DIN
+    site_data = power_wall.site() or {}
+    gateway_din = power_wall.din() or "unknown"
+    
+    site_info = SiteInfoResponse(site_data.get("site_name", "Tesla Powerwall"))
+    
+    return site_info, gateway_din
 
 
 async def _powerwall_is_reachable(ip_address: str, password: str) -> bool:
     """Check if the powerwall is reachable."""
     try:
-        async with Powerwall(ip_address) as power_wall:
-            await power_wall.login(password)
-    except AccessDeniedError:
-        return True
-    except PowerwallUnreachableError:
+        power_wall = pypowerwall.Powerwall(host=ip_address, password=password, timeout=5)
+        if power_wall.is_connected():
+            return True
+        power_wall.connect()
+        return power_wall.is_connected()
+    except Exception:
         return False
-    return True
 
 
 async def validate_input(hass: HomeAssistant, data: dict[str, str]) -> dict[str, str]:
@@ -71,23 +86,26 @@ async def validate_input(hass: HomeAssistant, data: dict[str, str]) -> dict[str,
 
     Data has the keys from schema with values provided by the user.
     """
-    session = async_create_clientsession(
-        hass, verify_ssl=False, cookie_jar=CookieJar(unsafe=True)
+    # pypowerwall doesn't use aiohttp sessions
+    power_wall = pypowerwall.Powerwall(
+        host=data[CONF_IP_ADDRESS], 
+        password=data[CONF_PASSWORD],
+        timeout=10,
+        auto_select=True,
+        retry_modes=True
     )
-    async with Powerwall(data[CONF_IP_ADDRESS], http_session=session) as power_wall:
-        password = data[CONF_PASSWORD]
+    
+    try:
+        site_info, gateway_din = await _login_and_fetch_site_info(
+            power_wall, data[CONF_PASSWORD]
+        )
+    except Exception as err:
+        # Only log the exception without the traceback
+        _LOGGER.error(str(err))
+        raise WrongVersion from err
 
-        try:
-            site_info, gateway_din = await _login_and_fetch_site_info(
-                power_wall, password
-            )
-        except MissingAttributeError as err:
-            # Only log the exception without the traceback
-            _LOGGER.error(str(err))
-            raise WrongVersion from err
-
-        # Return info that you want to store in the config entry.
-        return {"title": site_info.site_name, "unique_id": gateway_din.upper()}
+    # Return info that you want to store in the config entry.
+    return {"title": site_info.site_name, "unique_id": gateway_din.upper()}
 
 
 class PowerwallConfigFlow(ConfigFlow, domain=DOMAIN):

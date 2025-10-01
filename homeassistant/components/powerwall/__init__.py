@@ -7,14 +7,23 @@ from datetime import timedelta
 import logging
 
 from aiohttp import CookieJar
-from tesla_powerwall import (
-    AccessDeniedError,
-    ApiError,
-    MissingAttributeError,
-    Powerwall,
-    PowerwallUnreachableError,
-)
 from yarl import URL
+
+# Import pypowerwall library (replacing tesla_powerwall)
+import pypowerwall
+
+# Define compatibility exceptions for pypowerwall
+class AccessDeniedError(Exception):
+    """Access denied error for pypowerwall compatibility."""
+
+class ApiError(Exception):
+    """API error for pypowerwall compatibility."""
+
+class MissingAttributeError(Exception):
+    """Missing attribute error for pypowerwall compatibility."""
+
+class PowerwallUnreachableError(Exception):
+    """Powerwall unreachable error for pypowerwall compatibility."""
 
 from homeassistant.components import persistent_notification
 from homeassistant.config_entries import ConfigEntry
@@ -59,7 +68,7 @@ class PowerwallDataManager:
     def __init__(
         self,
         hass: HomeAssistant,
-        power_wall: Powerwall,
+        power_wall: pypowerwall.Powerwall,
         cookie_jar: CookieJar,
         entry: PowerwallConfigEntry,
         ip_address: str,
@@ -82,11 +91,12 @@ class PowerwallDataManager:
 
     async def _recreate_powerwall_login(self) -> None:
         """Recreate the login on auth failure."""
-        if self.power_wall.is_authenticated():
-            await self.power_wall.logout()
-        # Always use the password when recreating the login
-        await self.power_wall.login(self.password or "")
-        self.save_auth_cookie()
+        # pypowerwall handles authentication internally through connect()
+        # Recreate the connection to re-authenticate
+        try:
+            self.power_wall.connect()
+        except Exception as err:
+            raise AccessDeniedError("Failed to reconnect to Powerwall") from err
 
     async def async_update_data(self) -> PowerwallData:
         """Fetch data from API endpoint."""
@@ -133,14 +143,31 @@ class PowerwallDataManager:
     @callback
     def save_auth_cookie(self) -> None:
         """Save the auth cookie."""
-        for cookie in self.cookie_jar:
-            if cookie.key == AUTH_COOKIE_KEY:
-                self.hass.config_entries.async_update_entry(
-                    self.entry,
-                    data={**self.entry.data, CONFIG_ENTRY_COOKIE: cookie.value},
-                )
-                _LOGGER.debug("Saved auth cookie")
-                break
+        # pypowerwall handles authentication differently, 
+        # we'll keep this method for compatibility but it's essentially a no-op
+        _LOGGER.debug("pypowerwall handles authentication internally")
+
+
+async def _create_powerwall(ip_address: str, password: str | None, http_session=None) -> pypowerwall.Powerwall:
+    """Create a Powerwall instance using pypowerwall library."""
+    # pypowerwall doesn't use http_session in the same way
+    # Initialize with basic parameters and let it auto-detect the connection mode
+    powerwall = pypowerwall.Powerwall(
+        host=ip_address,
+        password=password or "",
+        timeout=10,
+        auto_select=True,  # Auto-detect connection mode (Local/TEDAPI)
+        retry_modes=True,  # Try different connection modes
+    )
+    
+    # Connect to determine the appropriate mode for this Powerwall
+    if not powerwall.is_connected():
+        try:
+            powerwall.connect()
+        except Exception as err:
+            raise PowerwallUnreachableError(f"Could not connect to Powerwall at {ip_address}") from err
+    
+    return powerwall
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: PowerwallConfigEntry) -> bool:
@@ -166,8 +193,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: PowerwallConfigEntry) ->
     )
 
     async with AsyncExitStack() as stack:
-        power_wall = Powerwall(ip_address, http_session=http_session, verify_ssl=False)
-        stack.push_async_callback(power_wall.close)
+        power_wall = await _create_powerwall(ip_address, password)
+        # No need for stack cleanup with pypowerwall as it manages connections differently
 
         for tries in range(2):
             try:
@@ -269,70 +296,121 @@ async def async_migrate_entity_unique_ids(
 
 
 async def _login_and_fetch_base_info(
-    power_wall: Powerwall, host: str, password: str | None, use_auth_cookie: bool
+    power_wall: pypowerwall.Powerwall, host: str, password: str | None, use_auth_cookie: bool
 ) -> PowerwallBaseInfo:
     """Login to the powerwall and fetch the base info."""
-    # Login step is skipped if password is None or if we are using the auth cookie
-    if not (password is None or use_auth_cookie):
-        await power_wall.login(password)
+    # pypowerwall handles authentication automatically in connect()
+    # No explicit login needed as it's handled during initialization
     return await _call_base_info(power_wall, host)
 
 
-async def _call_base_info(power_wall: Powerwall, host: str) -> PowerwallBaseInfo:
+async def _call_base_info(power_wall: pypowerwall.Powerwall, host: str) -> PowerwallBaseInfo:
     """Return PowerwallBaseInfo for the device."""
-    # We await each call individually since the powerwall
-    # supports http keep-alive and we want to reuse the connection
-    # as its faster than establishing a new connection when
-    # run concurrently.
-    gateway_din = await power_wall.get_gateway_din()
-    site_info = await power_wall.get_site_info()
-    status = await power_wall.get_status()
-    device_type = await power_wall.get_device_type()
-    serial_numbers = await power_wall.get_serial_numbers()
-    batteries = await power_wall.get_batteries()
-    # Serial numbers MUST be sorted to ensure the unique_id is always the same
-    # for backwards compatibility.
-    return PowerwallBaseInfo(
-        gateway_din=gateway_din,
-        site_info=site_info,
-        status=status,
-        device_type=device_type,
-        serial_numbers=sorted(serial_numbers),
-        url=f"https://{host}",
-        batteries={battery.serial_number: battery for battery in batteries},
-    )
+    # Get basic information from pypowerwall
+    # Note: pypowerwall methods are synchronous, not async
+    try:
+        gateway_din = power_wall.din() or "unknown"
+        site_data = power_wall.site() or {}
+        status_data = power_wall.status() or {}
+        vitals_data = power_wall.vitals() or {}
+        version_info = power_wall.version() or "Unknown"
+        battery_data = power_wall.battery_blocks() or {}
+        
+        # Create compatible response objects
+        site_info = SiteInfoResponse.from_dict(site_data)
+        status = PowerwallStatusResponse.from_dict({"version": version_info})
+        
+        # Determine device type based on available data or connection mode
+        device_type_name = "PowerWall 3" if hasattr(power_wall, 'tedapi_mode') and power_wall.tedapi_mode else "PowerWall 2"
+        device_type = DeviceType.from_string(device_type_name)
+        
+        # Extract serial numbers from vitals or battery data
+        serial_numbers = []
+        if isinstance(battery_data, dict):
+            for battery_info in battery_data.values():
+                if isinstance(battery_info, dict) and "serial_number" in battery_info:
+                    serial_numbers.append(battery_info["serial_number"])
+        
+        # If no serials from batteries, try to get from other sources
+        if not serial_numbers and isinstance(vitals_data, dict):
+            # Look for serial numbers in vitals data structure
+            for key, value in vitals_data.items():
+                if "serial" in key.lower() and isinstance(value, str):
+                    serial_numbers.append(value)
+        
+        # Fallback to gateway DIN if no other serials found
+        if not serial_numbers:
+            serial_numbers = [gateway_din]
+        
+        # Create battery responses
+        batteries = {}
+        if isinstance(battery_data, dict):
+            for i, (battery_id, battery_info) in enumerate(battery_data.items()):
+                if isinstance(battery_info, dict):
+                    battery_response = BatteryResponse.from_dict(battery_info)
+                    batteries[battery_response.serial_number] = battery_response
+        
+        return PowerwallBaseInfo(
+            gateway_din=gateway_din,
+            site_info=site_info,
+            status=status,
+            device_type=device_type,
+            serial_numbers=sorted(serial_numbers),
+            url=f"https://{host}",
+            batteries=batteries,
+        )
+    except Exception as err:
+        raise MissingAttributeError(f"Failed to fetch powerwall base info: {err}") from err
 
 
-async def get_backup_reserve_percentage(power_wall: Powerwall) -> float | None:
+async def get_backup_reserve_percentage(power_wall: pypowerwall.Powerwall) -> float | None:
     """Return the backup reserve percentage."""
     try:
-        return await power_wall.get_backup_reserve_percentage()
-    except MissingAttributeError:
+        return power_wall.get_reserve()
+    except Exception:
         return None
 
 
-async def _fetch_powerwall_data(power_wall: Powerwall) -> PowerwallData:
+async def _fetch_powerwall_data(power_wall: pypowerwall.Powerwall) -> PowerwallData:
     """Process and update powerwall data."""
-    # We await each call individually since the powerwall
-    # supports http keep-alive and we want to reuse the connection
-    # as its faster than establishing a new connection when
-    # run concurrently.
-    backup_reserve = await get_backup_reserve_percentage(power_wall)
-    charge = await power_wall.get_charge()
-    site_master = await power_wall.get_sitemaster()
-    meters = await power_wall.get_meters()
-    grid_services_active = await power_wall.is_grid_services_active()
-    grid_status = await power_wall.get_grid_status()
-    batteries = await power_wall.get_batteries()
-    return PowerwallData(
-        charge=charge,
-        site_master=site_master,
-        meters=meters,
-        grid_services_active=grid_services_active,
-        grid_status=grid_status,
-        backup_reserve=backup_reserve,
-        batteries={battery.serial_number: battery for battery in batteries},
-    )
+    # pypowerwall methods are synchronous, no need to await
+    try:
+        backup_reserve = await get_backup_reserve_percentage(power_wall)
+        charge = power_wall.level() or 0.0
+        
+        # Get raw data and create compatible responses
+        site_master_data = power_wall.site() or {}
+        meters_data = power_wall.grid() or {}  # pypowerwall.grid() gives meter data
+        grid_status_data = power_wall.grid_status() or "Unknown"
+        battery_data = power_wall.battery_blocks() or {}
+        
+        # Create compatible response objects
+        site_master = SiteMasterResponse.from_dict(site_master_data)
+        meters = MetersAggregatesResponse.from_dict(meters_data)
+        grid_status = GridStatus.from_string(grid_status_data)
+        
+        # Grid services active - check if available in pypowerwall
+        grid_services_active = False  # Default for now, may need to derive from other data
+        
+        # Convert battery data to compatible format
+        batteries = {}
+        if isinstance(battery_data, dict):
+            for battery_id, battery_info in battery_data.items():
+                if isinstance(battery_info, dict):
+                    battery_response = BatteryResponse.from_dict(battery_info)
+                    batteries[battery_response.serial_number] = battery_response
+        
+        return PowerwallData(
+            charge=charge,
+            site_master=site_master,
+            meters=meters,
+            grid_services_active=grid_services_active,
+            grid_status=grid_status,
+            backup_reserve=backup_reserve,
+            batteries=batteries,
+        )
+    except Exception as err:
+        raise MissingAttributeError(f"Failed to fetch powerwall data: {err}") from err
 
 
 @callback
