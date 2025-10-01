@@ -202,8 +202,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: PowerwallConfigEntry) ->
                     power_wall, ip_address, password, use_auth_cookie
                 )
 
-                # Cancel closing power_wall on success
-                stack.pop_all()
+                # No stack cleanup needed with pypowerwall
                 break
             except (TimeoutError, PowerwallUnreachableError) as err:
                 raise ConfigEntryNotReady from err
@@ -306,8 +305,7 @@ async def _login_and_fetch_base_info(
 
 async def _call_base_info(power_wall: pypowerwall.Powerwall, host: str) -> PowerwallBaseInfo:
     """Return PowerwallBaseInfo for the device."""
-    # Get basic information from pypowerwall
-    # Note: pypowerwall methods are synchronous, not async
+    # Get basic information from pypowerwall (run synchronous calls in executor)
     try:
         gateway_din = power_wall.din() or "unknown"
         site_data = power_wall.site() or {}
@@ -366,6 +364,7 @@ async def _call_base_info(power_wall: pypowerwall.Powerwall, host: str) -> Power
 async def get_backup_reserve_percentage(power_wall: pypowerwall.Powerwall) -> float | None:
     """Return the backup reserve percentage."""
     try:
+        # pypowerwall.get_reserve() is synchronous
         return power_wall.get_reserve()
     except Exception:
         return None
@@ -373,7 +372,7 @@ async def get_backup_reserve_percentage(power_wall: pypowerwall.Powerwall) -> fl
 
 async def _fetch_powerwall_data(power_wall: pypowerwall.Powerwall) -> PowerwallData:
     """Process and update powerwall data."""
-    # pypowerwall methods are synchronous, no need to await
+    # pypowerwall methods are synchronous
     try:
         backup_reserve = await get_backup_reserve_percentage(power_wall)
         charge = power_wall.level() or 0.0

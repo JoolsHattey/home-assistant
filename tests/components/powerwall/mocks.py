@@ -5,12 +5,14 @@ import json
 import os
 from unittest.mock import MagicMock
 
-from tesla_powerwall import (
+import pypowerwall
+
+# Import our compatibility types from models
+from homeassistant.components.powerwall.models import (
     BatteryResponse,
     DeviceType,
     GridStatus,
     MetersAggregatesResponse,
-    Powerwall,
     PowerwallStatusResponse,
     SiteInfoResponse,
     SiteMasterResponse,
@@ -67,47 +69,54 @@ async def _mock_powerwall_return_value(
     backup_reserve_percentage=None,
     batteries=None,
 ):
-    powerwall_mock = MagicMock(Powerwall)
-    powerwall_mock.__aenter__.return_value = powerwall_mock
-
-    powerwall_mock.get_site_info.return_value = site_info
-    powerwall_mock.get_charge.return_value = charge
-    powerwall_mock.get_sitemaster.return_value = sitemaster
-    powerwall_mock.get_meters.return_value = meters
-    powerwall_mock.get_grid_status.return_value = grid_status
-    powerwall_mock.get_status.return_value = status
-    powerwall_mock.get_device_type.return_value = device_type
-    powerwall_mock.get_serial_numbers.return_value = serial_numbers
-    powerwall_mock.get_backup_reserve_percentage.return_value = (
-        backup_reserve_percentage
-    )
-    powerwall_mock.is_grid_services_active.return_value = grid_services_active
-    powerwall_mock.get_gateway_din.return_value = MOCK_GATEWAY_DIN
-    powerwall_mock.get_batteries.return_value = batteries
+    powerwall_mock = MagicMock(spec=pypowerwall.Powerwall)
+    
+    # Mock pypowerwall methods (synchronous, not async)
+    powerwall_mock.site.return_value = site_info._raw if site_info else {}
+    powerwall_mock.level.return_value = charge
+    powerwall_mock.grid.return_value = meters._raw if meters else {}
+    powerwall_mock.grid_status.return_value = grid_status.grid_status if grid_status else "Unknown"
+    powerwall_mock.status.return_value = status._raw if status else {}
+    powerwall_mock.vitals.return_value = {}
+    powerwall_mock.version.return_value = status._raw.get("version", "Unknown") if status else "Unknown"
+    powerwall_mock.get_reserve.return_value = backup_reserve_percentage
+    powerwall_mock.din.return_value = MOCK_GATEWAY_DIN
+    
+    # Mock battery blocks
+    battery_blocks = {}
+    if batteries:
+        for i, battery in enumerate(batteries):
+            battery_blocks[f"battery_{i}"] = battery._raw if hasattr(battery, '_raw') else {"serial_number": f"TEST{i}"}
+    powerwall_mock.battery_blocks.return_value = battery_blocks
+    
+    # Mock connection methods
+    powerwall_mock.is_connected.return_value = True
+    powerwall_mock.connect.return_value = True
+    
+    # Mock TEDAPI detection (assume PW2 for tests unless specified)
+    powerwall_mock.tedapi_mode = False
 
     return powerwall_mock
 
 
 async def _mock_powerwall_site_name(hass: HomeAssistant, site_name: str) -> MagicMock:
-    powerwall_mock = MagicMock(Powerwall)
-    powerwall_mock.__aenter__.return_value = powerwall_mock
+    powerwall_mock = MagicMock(spec=pypowerwall.Powerwall)
 
-    site_info_resp = SiteInfoResponse.from_dict(
-        await _async_load_json_fixture(hass, "site_info.json")
-    )
-    site_info_resp._raw["site_name"] = site_name
-    site_info_resp.site_name = site_name
-    powerwall_mock.get_site_info.return_value = site_info_resp
-    powerwall_mock.get_gateway_din.return_value = MOCK_GATEWAY_DIN
+    site_info_data = await _async_load_json_fixture(hass, "site_info.json")
+    site_info_data["site_name"] = site_name
+    
+    powerwall_mock.site.return_value = site_info_data
+    powerwall_mock.din.return_value = MOCK_GATEWAY_DIN
+    powerwall_mock.is_connected.return_value = True
 
     return powerwall_mock
 
 
 async def _mock_powerwall_side_effect(site_info=None):
-    powerwall_mock = MagicMock(Powerwall)
-    powerwall_mock.__aenter__.return_value = powerwall_mock
+    powerwall_mock = MagicMock(spec=pypowerwall.Powerwall)
 
-    powerwall_mock.get_site_info.side_effect = site_info
+    powerwall_mock.site.side_effect = site_info
+    powerwall_mock.is_connected.return_value = True
     return powerwall_mock
 
 
