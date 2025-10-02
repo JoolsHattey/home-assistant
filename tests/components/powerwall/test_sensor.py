@@ -4,8 +4,7 @@ from datetime import timedelta
 from unittest.mock import Mock, patch
 
 import pytest
-from pypowerwall import MetersAggregatesResponse
-from pypowerwall.error import MissingAttributeError
+from pypowerwall import MetersAggregatesResponse, MissingAttributeError
 
 from homeassistant.components.powerwall.const import DOMAIN
 from homeassistant.components.sensor import ATTR_STATE_CLASS
