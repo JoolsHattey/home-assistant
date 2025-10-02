@@ -31,5 +31,5 @@ jobs:
             ghcr.io/joolshattey/homeassistant-powerwall3:latest
             ghcr.io/joolshattey/homeassistant-powerwall3:${{ github.sha }}
           build-args: |
-            BUILD_FROM=ghcr.io/home-assistant/amd64-homeassistant-base:2025.09.3
+            BUILD_FROM=ghcr.io/home-assistant/amd64-homeassistant-base:2025.10.0
             BUILD_ARCH=amd64
