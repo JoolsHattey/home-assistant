@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TypedDict
 
-from tesla_powerwall import (
+from pypowerwall import (
     BatteryResponse,
     DeviceType,
     GridStatus,

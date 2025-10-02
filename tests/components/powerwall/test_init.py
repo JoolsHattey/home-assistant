@@ -5,7 +5,7 @@ from http.cookies import Morsel
 from unittest.mock import MagicMock, patch
 
 from aiohttp import CookieJar
-from tesla_powerwall import AccessDeniedError, LoginResponse
+from pypowerwall import AccessDeniedError, LoginResponse
 
 from homeassistant.components.powerwall.const import (
     AUTH_COOKIE_KEY,

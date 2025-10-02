@@ -8,7 +8,7 @@ import logging
 from typing import Any
 
 from aiohttp import CookieJar
-from tesla_powerwall import (
+from pypowerwall import (
     AccessDeniedError,
     MissingAttributeError,
     Powerwall,
