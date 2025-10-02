@@ -9,7 +9,8 @@ from homeassistant.helpers.update_coordinator import (
 from .const import (
     DOMAIN,
     MANUFACTURER,
-    MODEL,
+    MODEL_PW2,
+    MODEL_PW3,
     POWERWALL_API,
     POWERWALL_BASE_INFO,
     POWERWALL_COORDINATOR,
@@ -33,7 +34,7 @@ class PowerWallEntity(CoordinatorEntity[DataUpdateCoordinator[PowerwallData]]):
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, self.base_unique_id)},
             manufacturer=MANUFACTURER,
-            model=f"{MODEL} ({base_info.device_type.name})",
+            model=f"{base_info.device_type.name}",
             name=base_info.site_info.site_name,
             sw_version=base_info.status.version,
             configuration_url=base_info.url,
@@ -65,7 +66,7 @@ class BatteryEntity(CoordinatorEntity[DataUpdateCoordinator[PowerwallData]]):
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, self.base_unique_id)},
             manufacturer=MANUFACTURER,
-            model=f"{MODEL} ({battery.part_number})",
+            model=f"{MODEL_PW2} ({battery.part_number})",
             name=f"{base_info.site_info.site_name} {battery.serial_number}",
             sw_version=base_info.status.version,
             configuration_url=base_info.url,
