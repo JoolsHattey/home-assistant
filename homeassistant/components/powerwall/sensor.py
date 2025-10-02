@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from operator import attrgetter, methodcaller
 from typing import TYPE_CHECKING
 
-from pypowerwall import GridState, MeterResponse, MeterType
+from tesla_powerwall import GridState, MeterResponse, MeterType
 
 from homeassistant.components.sensor import (
     SensorDeviceClass,

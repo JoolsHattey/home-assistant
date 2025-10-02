@@ -2,7 +2,7 @@
 
 from typing import Any
 
-from pypowerwall import GridStatus, IslandMode, PowerwallError
+from tesla_powerwall import GridStatus, IslandMode, PowerwallError
 
 from homeassistant.components.switch import SwitchDeviceClass, SwitchEntity
 from homeassistant.const import EntityCategory

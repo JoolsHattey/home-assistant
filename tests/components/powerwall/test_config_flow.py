@@ -4,7 +4,7 @@ from datetime import timedelta
 from unittest.mock import MagicMock, patch
 
 import pytest
-from pypowerwall import (
+from tesla_powerwall import (
     AccessDeniedError,
     MissingAttributeError,
     PowerwallUnreachableError,

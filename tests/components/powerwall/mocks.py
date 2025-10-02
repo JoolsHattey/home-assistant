@@ -5,7 +5,7 @@ import json
 import os
 from unittest.mock import MagicMock
 
-from pypowerwall import (
+from tesla_powerwall import (
     BatteryResponse,
     DeviceType,
     GridStatus,

@@ -3,7 +3,7 @@
 from unittest.mock import MagicMock, patch
 
 import pytest
-from pypowerwall import GridStatus, PowerwallError
+from tesla_powerwall import GridStatus, PowerwallError
 
 from homeassistant.components.powerwall.const import DOMAIN
 from homeassistant.components.switch import (
@@ -93,7 +93,7 @@ async def test_off(hass: HomeAssistant, mock_powerwall) -> None:
 async def test_exception_on_powerwall_error(
     hass: HomeAssistant, mock_powerwall
 ) -> None:
-    """Ensure that an exception in the pypowerwall library causes a HomeAssistantError."""
+    """Ensure that an exception in the tesla_powerwall library causes a HomeAssistantError."""
 
     mock_powerwall.set_island_mode.side_effect = PowerwallError("Mock exception")
     with pytest.raises(HomeAssistantError, match="Setting off-grid operation to"):
