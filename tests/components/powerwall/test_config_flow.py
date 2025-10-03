@@ -4,7 +4,7 @@ from datetime import timedelta
 from unittest.mock import MagicMock, patch
 
 import pytest
-from tesla_powerwall import (
+from homeassistant.components.powerwall.tesla_powerwall_compat import (
     AccessDeniedError,
     MissingAttributeError,
     PowerwallUnreachableError,

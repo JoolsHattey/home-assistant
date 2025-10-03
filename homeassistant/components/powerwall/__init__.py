@@ -7,7 +7,7 @@ from datetime import timedelta
 import logging
 
 from aiohttp import CookieJar
-from tesla_powerwall import (
+from .tesla_powerwall_compat import (
     AccessDeniedError,
     ApiError,
     MissingAttributeError,

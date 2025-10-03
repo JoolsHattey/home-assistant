@@ -2,7 +2,7 @@
 
 from typing import TYPE_CHECKING
 
-from tesla_powerwall import GridStatus, MeterType
+from .tesla_powerwall_compat import GridStatus, MeterType
 
 from homeassistant.components.binary_sensor import (
     BinarySensorDeviceClass,
