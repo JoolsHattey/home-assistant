@@ -13,6 +13,6 @@
   ],
   "documentation": "https://www.home-assistant.io/integrations/powerwall",
   "iot_class": "local_polling",
-  "loggers": ["tesla_powerwall"],
-  "requirements": ["tesla-powerwall==0.5.2"]
+  "loggers": ["pypowerwall"],
+  "requirements": ["pypowerwall==0.14.2"]
 }

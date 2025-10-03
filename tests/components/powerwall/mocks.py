@@ -5,7 +5,7 @@ import json
 import os
 from unittest.mock import MagicMock
 
-from tesla_powerwall import (
+from homeassistant.components.powerwall.tesla_powerwall_compat import (
     BatteryResponse,
     DeviceType,
     GridStatus,
